@@ -6,18 +6,35 @@ interface CreatePlanInput {
   name: string;
   monthlyAllowance: number;
   maxPerRequest: number;
+  dailyAllowance: number | null;
 }
 
 interface UpdatePlanInput {
   name?: string;
   monthlyAllowance?: number;
   maxPerRequest?: number;
+  // null removes the daily rule; undefined leaves it unchanged
+  dailyAllowance?: number | null;
+}
+
+const PLAN_COLUMNS = `id, owner_account_id, scope, name,
+  monthly_allowance, max_per_request, daily_allowance,
+  version, created_at, updated_at`;
+
+export async function getPredefinedPlans() {
+  const result = await pool.query(
+    `SELECT ${PLAN_COLUMNS}
+     FROM plans
+     WHERE owner_account_id IS NULL
+     ORDER BY scope, monthly_allowance`,
+  );
+
+  return result.rows;
 }
 
 export async function getPlans(accountId: string) {
   const result = await pool.query(
-    `SELECT id, owner_account_id, scope, name,
-            monthly_allowance, max_per_request, updated_at
+    `SELECT ${PLAN_COLUMNS}
      FROM plans
      WHERE owner_account_id IS NULL
         OR owner_account_id = $1
@@ -33,8 +50,7 @@ export async function getPlanById(
   planId: string,
 ) {
   const result = await pool.query(
-    `SELECT id, owner_account_id, scope, name,
-            monthly_allowance, max_per_request, updated_at
+    `SELECT ${PLAN_COLUMNS}
      FROM plans
      WHERE id = $1
        AND (
@@ -58,44 +74,57 @@ export async function createPlan(
        name,
        monthly_allowance,
        max_per_request,
-       updated_at
+       daily_allowance
      )
-     VALUES ($1, $2, $3, $4, $5, NOW())
-     RETURNING id, owner_account_id, scope, name,
-               monthly_allowance, max_per_request, updated_at`,
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING ${PLAN_COLUMNS}`,
     [
       accountId,
       input.scope,
       input.name,
       input.monthlyAllowance,
       input.maxPerRequest,
+      input.dailyAllowance,
     ],
   );
 
   return result.rows[0];
 }
 
+
 export async function updatePlan(
   accountId: string,
   planId: string,
-  input: UpdatePlanInput,
+  updates: {
+    name?: string;
+    monthlyAllowance?: number;
+    maxPerRequest?: number;
+    dailyAllowance?: number | null;
+  },
 ) {
   const result = await pool.query(
     `UPDATE plans
-     SET name = COALESCE($3, name),
-         monthly_allowance = COALESCE($4, monthly_allowance),
-         max_per_request = COALESCE($5, max_per_request),
-         updated_at = NOW()
-     WHERE id = $1
-       AND owner_account_id = $2
-     RETURNING id, owner_account_id, scope, name,
-               monthly_allowance, max_per_request, updated_at`,
+     SET
+       name = COALESCE($1, name),
+       monthly_allowance = COALESCE($2, monthly_allowance),
+       max_per_request = COALESCE($3, max_per_request),
+       daily_allowance = CASE
+         WHEN $4::boolean THEN $5::bigint
+         ELSE daily_allowance
+       END,
+       version = version + 1,
+       updated_at = now()
+     WHERE id = $6
+       AND owner_account_id = $7
+     RETURNING *`,
     [
+      updates.name ?? null,
+      updates.monthlyAllowance ?? null,
+      updates.maxPerRequest ?? null,
+      updates.dailyAllowance !== undefined,
+      updates.dailyAllowance ?? null,
       planId,
       accountId,
-      input.name ?? null,
-      input.monthlyAllowance ?? null,
-      input.maxPerRequest ?? null,
     ],
   );
 

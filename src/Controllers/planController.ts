@@ -1,16 +1,32 @@
 
 import type { Request, Response, NextFunction } from "express";
 import * as planService from "../Services/planService.js";
+import {
+  isNonNegativeInteger,
+  isPositiveInteger,
+  parseId,
+} from "../Utils/validation.js";
+import { pool } from "../Config/database.js";
 
-function isPositiveInteger(value: unknown): value is number {
-  return (
-    typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value > 0
-  );
+// dailyAllowance is optional: null (or absent on create) means no daily rule.
+function isValidDailyAllowance(value: unknown): value is number | null {
+  return value === null || isNonNegativeInteger(value);
 }
 
-export async function getPlansController(
+export async function getPredefinedPlans(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const plans = await planService.getPredefinedPlans();
+    res.status(200).json({ plans });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getPlans(
   _req: Request,
   res: Response,
   next: NextFunction,
@@ -23,16 +39,19 @@ export async function getPlansController(
   }
 }
 
-export async function getPlanByIdController(
+export async function getPlanById(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
+  const planId = parseId(req.params.id);
+  if (!planId) {
+    res.status(404).json({ message: "Plan not found" });
+    return;
+  }
+
   try {
-    const plan = await planService.getPlanById(
-      res.locals.accountId,
-      String(req.params.id),
-    );
+    const plan = await planService.getPlanById(res.locals.accountId, planId);
 
     if (!plan) {
       res.status(404).json({ message: "Plan not found" });
@@ -45,45 +64,39 @@ export async function getPlanByIdController(
   }
 }
 
-export async function createPlanController(
+export async function createPlan(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const { scope, name, monthlyAllowance, maxPerRequest } =
-    req.body ?? {};
+  const { scope, name, monthlyAllowance, maxPerRequest } = req.body ?? {};
+  const dailyAllowance = req.body?.dailyAllowance ?? null;
 
   if (
     (scope !== "account" && scope !== "user") ||
     typeof name !== "string" ||
     !name.trim() ||
-    !isPositiveInteger(monthlyAllowance) ||
-    !isPositiveInteger(maxPerRequest)
+    !isNonNegativeInteger(monthlyAllowance) ||
+    !isPositiveInteger(maxPerRequest) ||
+    !isValidDailyAllowance(dailyAllowance)
   ) {
     res.status(400).json({
       message:
-        "scope, name, positive integer monthlyAllowance, and positive integer maxPerRequest are required",
-    });
-    return;
-  }
-
-  if (maxPerRequest > monthlyAllowance) {
-    res.status(400).json({
-      message: "maxPerRequest cannot exceed monthlyAllowance",
+        "scope ('account' or 'user'), name, non-negative integer monthlyAllowance, " +
+        "positive integer maxPerRequest are required; dailyAllowance is an optional " +
+        "non-negative integer or null",
     });
     return;
   }
 
   try {
-    const plan = await planService.createPlan(
-      res.locals.accountId,
-      {
-        scope,
-        name: name.trim(),
-        monthlyAllowance,
-        maxPerRequest,
-      },
-    );
+    const plan = await planService.createPlan(res.locals.accountId, {
+      scope,
+      name: name.trim(),
+      monthlyAllowance,
+      maxPerRequest,
+      dailyAllowance,
+    });
 
     res.status(201).json({ plan });
   } catch (error) {
@@ -91,19 +104,33 @@ export async function createPlanController(
   }
 }
 
-export async function updatePlanController(
+
+export async function updatePlan(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const { name, monthlyAllowance, maxPerRequest } =
+  const planId = parseId(req.params.id);
+
+  if (!planId) {
+    res.status(404).json({ message: "Plan not found" });
+    return;
+  }
+
+  const { name, monthlyAllowance, maxPerRequest, dailyAllowance } =
     req.body ?? {};
 
   const hasName = name !== undefined;
   const hasMonthlyAllowance = monthlyAllowance !== undefined;
   const hasMaxPerRequest = maxPerRequest !== undefined;
+  const hasDailyAllowance = dailyAllowance !== undefined;
 
-  if (!hasName && !hasMonthlyAllowance && !hasMaxPerRequest) {
+  if (
+    !hasName &&
+    !hasMonthlyAllowance &&
+    !hasMaxPerRequest &&
+    !hasDailyAllowance
+  ) {
     res.status(400).json({
       message: "Provide at least one field to update",
     });
@@ -111,12 +138,11 @@ export async function updatePlanController(
   }
 
   if (
-    (hasName &&
-      (typeof name !== "string" || !name.trim())) ||
-    (hasMonthlyAllowance &&
-      !isPositiveInteger(monthlyAllowance)) ||
-    (hasMaxPerRequest &&
-      !isPositiveInteger(maxPerRequest))
+    (hasName && (typeof name !== "string" || !name.trim())) ||
+    (hasMonthlyAllowance && !isNonNegativeInteger(monthlyAllowance)) ||
+    (hasMaxPerRequest && !isPositiveInteger(maxPerRequest)) ||
+    (hasDailyAllowance &&
+      !(dailyAllowance === null || isNonNegativeInteger(dailyAllowance)))
   ) {
     res.status(400).json({
       message: "Invalid plan update fields",
@@ -125,9 +151,11 @@ export async function updatePlanController(
   }
 
   try {
+    const accountId = res.locals.accountId as string;
+
     const existingPlan = await planService.getPlanById(
-      res.locals.accountId,
-      String(req.params.id),
+      accountId,
+      planId,
     );
 
     if (!existingPlan) {
@@ -142,26 +170,14 @@ export async function updatePlanController(
       return;
     }
 
-    const finalAllowance =
-      monthlyAllowance ?? Number(existingPlan.monthly_allowance);
-
-    const finalMaxPerRequest =
-      maxPerRequest ?? Number(existingPlan.max_per_request);
-
-    if (finalMaxPerRequest > finalAllowance) {
-      res.status(400).json({
-        message: "maxPerRequest cannot exceed monthlyAllowance",
-      });
-      return;
-    }
-
     const plan = await planService.updatePlan(
-      res.locals.accountId,
-      String(req.params.id),
+      accountId,
+      planId,
       {
         ...(hasName ? { name: name.trim() } : {}),
         ...(hasMonthlyAllowance ? { monthlyAllowance } : {}),
         ...(hasMaxPerRequest ? { maxPerRequest } : {}),
+        ...(hasDailyAllowance ? { dailyAllowance } : {}),
       },
     );
 
