@@ -1,0 +1,62 @@
+# Full stack: PostgreSQL, the usage metering service and the Docs Co example client.
+#
+#   docker compose up --build
+#
+#   Docs Co (example client)  http://localhost:8080
+#   Metering API              http://localhost:3000
+#
+# On the first start Postgres runs db/*.sql in order: the schema, the
+# predefined plans and later migrations. Data lives in the "pgdata" volume, so
+# it survives restarts; `docker compose down -v` starts from scratch.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: metering
+      POSTGRES_PASSWORD: metering
+      POSTGRES_DB: metering
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5434:5432" # for psql or running the tests against this database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metering -d metering"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build: .
+    init: true # forwards Ctrl+C / docker stop to Node
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://metering:metering@db:5432/metering
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-local-admin-key}
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/plans/predefined > /dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  client:
+    build: ./client
+    init: true
+    environment:
+      CLIENT_PORT: 8080
+      METERING_URL: http://api:3000
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-local-admin-key}
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
