@@ -1,0 +1,305 @@
+{
+  "ranAt": "2026-10-19T09:07:54.267Z",
+  "baseUrl": "http://api:3000",
+  "concurrency": 64,
+  "durationSeconds": 20,
+  "results": [
+    {
+      "name": "spread",
+      "description": "20 accounts x 5 users, random 1-10 units, 64 in flight for 20s",
+      "stats": {
+        "requests": 7736,
+        "rps": 385,
+        "p50": 156.6,
+        "p95": 242.3,
+        "p99": 288.8,
+        "max": 342.9,
+        "accepted": 7736,
+        "rejected": 0,
+        "errors": 0
+      },
+      "checks": [
+        {
+          "name": "no errors",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "every request accepted",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "ledger agrees for all 20 accounts",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        }
+      ]
+    },
+    {
+      "name": "hot-account",
+      "description": "1 account x 20 users, random 1-10 units, 64 in flight for 20s",
+      "stats": {
+        "requests": 2355,
+        "rps": 115,
+        "p50": 524.4,
+        "p95": 880.9,
+        "p99": 1207.4,
+        "max": 2150.3,
+        "accepted": 2355,
+        "rejected": 0,
+        "errors": 0
+      },
+      "checks": [
+        {
+          "name": "no errors",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "every request accepted",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "account counter = units the client saw accepted",
+          "pass": true,
+          "detail": "expected 13141, got 13141"
+        },
+        {
+          "name": "account counter = sum of user counters",
+          "pass": true,
+          "detail": "expected 13141, got 13141"
+        },
+        {
+          "name": "account counter = accepted units in history",
+          "pass": true,
+          "detail": "expected 13141, got 13141"
+        }
+      ]
+    },
+    {
+      "name": "exhaust-account",
+      "description": "3000 x 1-unit requests from 20 users against an account allowance of 1000, 64 in flight",
+      "stats": {
+        "requests": 3000,
+        "rps": 148,
+        "p50": 398.6,
+        "p95": 689.1,
+        "p99": 887.2,
+        "max": 1404.2,
+        "accepted": 1000,
+        "rejected": 2000,
+        "errors": 0
+      },
+      "checks": [
+        {
+          "name": "no errors",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "accepted exactly the allowance",
+          "pass": true,
+          "detail": "expected 1000, got 1000"
+        },
+        {
+          "name": "rejected the rest",
+          "pass": true,
+          "detail": "expected 2000, got 2000"
+        },
+        {
+          "name": "every rejection is the account monthly allowance",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "GET /usage shows 0 remaining",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "account counter = units the client saw accepted",
+          "pass": true,
+          "detail": "expected 1000, got 1000"
+        },
+        {
+          "name": "account counter = sum of user counters",
+          "pass": true,
+          "detail": "expected 1000, got 1000"
+        },
+        {
+          "name": "account counter = accepted units in history",
+          "pass": true,
+          "detail": "expected 1000, got 1000"
+        }
+      ]
+    },
+    {
+      "name": "exhaust-user",
+      "description": "1500 x 1-unit requests from 1 user with a user allowance of 500, 64 in flight",
+      "stats": {
+        "requests": 1500,
+        "rps": 160,
+        "p50": 362.6,
+        "p95": 619.7,
+        "p99": 751.5,
+        "max": 1130.8,
+        "accepted": 500,
+        "rejected": 1000,
+        "errors": 0
+      },
+      "checks": [
+        {
+          "name": "no errors",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "accepted exactly the allowance",
+          "pass": true,
+          "detail": "expected 500, got 500"
+        },
+        {
+          "name": "every rejection is the user monthly allowance",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "account counter = units the client saw accepted",
+          "pass": true,
+          "detail": "expected 500, got 500"
+        },
+        {
+          "name": "account counter = sum of user counters",
+          "pass": true,
+          "detail": "expected 500, got 500"
+        },
+        {
+          "name": "account counter = accepted units in history",
+          "pass": true,
+          "detail": "expected 500, got 500"
+        }
+      ]
+    },
+    {
+      "name": "retries",
+      "description": "500 requestIds x 4 concurrent copies, 3 units each, 64 in flight",
+      "stats": {
+        "requests": 2000,
+        "rps": 248,
+        "p50": 238,
+        "p95": 407.4,
+        "p99": 555.5,
+        "max": 924.2,
+        "accepted": 2000,
+        "rejected": 0,
+        "errors": 0
+      },
+      "checks": [
+        {
+          "name": "no errors (no 500 from duplicate inserts)",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "one fresh decision per requestId",
+          "pass": true,
+          "detail": "expected 500, got 500"
+        },
+        {
+          "name": "other copies replayed",
+          "pass": true,
+          "detail": "expected 1500, got 1500"
+        },
+        {
+          "name": "one history row per requestId",
+          "pass": true,
+          "detail": "expected 500, got 500"
+        },
+        {
+          "name": "units counted once per requestId",
+          "pass": true,
+          "detail": "expected 1500, got 1500"
+        },
+        {
+          "name": "account counter = units the client saw accepted",
+          "pass": true,
+          "detail": "expected 1500, got 1500"
+        },
+        {
+          "name": "account counter = sum of user counters",
+          "pass": true,
+          "detail": "expected 1500, got 1500"
+        },
+        {
+          "name": "account counter = accepted units in history",
+          "pass": true,
+          "detail": "expected 1500, got 1500"
+        }
+      ]
+    },
+    {
+      "name": "plan-changes",
+      "description": "10 users, 10-unit requests, 64 in flight for 20s; user max/request 20 -> 5 after 1/3, account allowance -> 1 after 2/3",
+      "stats": {
+        "requests": 5381,
+        "rps": 262,
+        "p50": 131.1,
+        "p95": 603,
+        "p99": 820.4,
+        "max": 1381.9,
+        "accepted": 986,
+        "rejected": 4395,
+        "errors": 0
+      },
+      "checks": [
+        {
+          "name": "no errors",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "accepted before any change",
+          "pass": true,
+          "detail": "expected true, got true"
+        },
+        {
+          "name": "requests ran in the max-change phase",
+          "pass": true,
+          "detail": "expected true, got true"
+        },
+        {
+          "name": "every request between the max change and the next change is rejected by the user max_per_request",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "every request started after the allowance cut is rejected by the account allowance",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "allowance below usage shows 0 remaining",
+          "pass": true,
+          "detail": "expected 0, got 0"
+        },
+        {
+          "name": "account counter = units the client saw accepted",
+          "pass": true,
+          "detail": "expected 9860, got 9860"
+        },
+        {
+          "name": "account counter = sum of user counters",
+          "pass": true,
+          "detail": "expected 9860, got 9860"
+        },
+        {
+          "name": "account counter = accepted units in history",
+          "pass": true,
+          "detail": "expected 9860, got 9860"
+        }
+      ]
+    }
+  ]
+}
