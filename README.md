@@ -113,19 +113,6 @@ in the admin view starts over with a brand-new demo account.
 
 ---
 
-## Concepts: accounts, users, plans
-
-| Concept | Meaning |
-|---|---|
-| **Account** | An application calling the service (e.g. Docs Co). Has one **account plan**, shared by all its users. Identified by its API key. |
-| **User** | A user of that application, registered under one account with the caller's own id (`externalId`). Has one **user plan**. |
-| **Plan** | A named set of limits with a `scope` of `account` or `user`. Predefined plans are global and read-only; custom plans belong to one account. |
-| **Units** | The single resource being metered (e.g. document pages). Always positive whole numbers. |
-
-Both plans apply to every request. A large user plan never increases the
-account's shared allowance. Users on the same plan share its *definition*,
-not its allowance: each user has their own totals.
-
 ### Predefined plans
 
 Created at startup by `db/002_seed.sql`:
